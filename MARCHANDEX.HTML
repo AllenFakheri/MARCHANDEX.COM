@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Bargaining Game - All In One</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono&display=swap');
+  body {
+    margin:0; background:#111; color:#e6c75c; font-family: 'Roboto Mono', monospace;
+    display: flex; flex-direction: column; align-items: center; height: 100vh;
+  }
+  #logo {
+    width: 120px; margin: 10px 0;
+  }
+  #priceInfo {
+    margin: 10px 0 5px 0;
+    font-weight: bold; font-size: 1.1em;
+  }
+  #chat {
+    background:#222; width: 90vw; max-width: 600px; height: 60vh; overflow-y: auto;
+    padding: 10px; border-radius: 8px; border: 2px solid #e6c75c;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .message {
+    max-width: 75%; padding: 6px 10px; border-radius: 10px; line-height: 1.3em;
+  }
+  .seller {
+    background: #3a3a1f; color: #e6c75c; align-self: flex-start;
+  }
+  .buyer {
+    background: #4a602f; color: #cde6a1; align-self: flex-end;
+  }
+  #inputArea {
+    margin-top: 10px; display: flex; width: 90vw; max-width: 600px;
+  }
+  #userInput {
+    flex-grow: 1; font-size: 1.2em; padding: 8px 12px; border-radius: 8px 0 0 8px;
+    border: 2px solid #e6c75c; outline: none; background:#111; color:#e6c75c;
+  }
+  #sendBtn, #resetBtn {
+    font-family: 'Roboto Mono', monospace;
+    font-weight: bold; font-size: 1.2em; cursor: pointer;
+    background: #e6c75c; color: #111; border:none; padding: 8px 20px;
+    border-radius: 0 8px 8px 0; user-select:none;
+    transition: background 0.3s ease;
+  }
+  #sendBtn:hover, #resetBtn:hover {
+    background: #f3da6a;
+  }
+  #resetBtn {
+    display: none;
+  }
+  #score {
+    margin-top: 8px;
+    font-size: 1em;
+  }
+  #categoryTracker {
+    font-size: 0.9em; margin-top: 3px; color: #c2b85a;
+  }
+  /* Emoji picker overlay */
+  #emojiPickerOverlay {
+    position: fixed; top:0; left:0; right:0; bottom:0;
+    background: rgba(0,0,0,0.85);
+    display: flex; justify-content: center; align-items: center;
+    z-index: 1000; flex-wrap: wrap; gap: 12px; padding: 20px;
+  }
+  .emojiBtn {
+    font-size: 2.5em; background: transparent; border: 2px solid #e6c75c;
+    border-radius: 12px; color: #e6c75c; width: 60px; height: 60px;
+    cursor: pointer; user-select:none;
+    display: flex; justify-content: center; align-items: center;
+    transition: background 0.3s ease, color 0.3s ease;
+  }
+  .emojiBtn:hover {
+    background: #e6c75c; color: #111;
+  }
+  #emojiPickerOverlay h2 {
+    width: 100%; color: #e6c75c; font-weight: bold; margin-bottom: 16px;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<img id="logo" src="logo.png" alt="Logo" onerror="this.style.display='none'"/>
+
+<div id="priceInfo"></div>
+<div id="chat"></div>
+
+<div id="inputArea" style="display:none;">
+  <input id="userInput" type="text" placeholder="Enter your offer, e.g. 1500" autocomplete="off" />
+  <button id="sendBtn">Send</button>
+  <button id="resetBtn">Play Again</button>
+</div>
+
+<div id="score"></div>
+<div id="categoryTracker"></div>
+
+<!-- Emoji Picker Overlay -->
+<div id="emojiPickerOverlay">
+  <h2>Pick Your Emoji Profile</h2>
+</div>
+
+<audio id="bgMusic" loop>
+  <!-- Uncomment and add your own music source here -->
+  <!-- <source src="mafia_theme.mp3" type="audio/mpeg"> -->
+</audio>
+
+<audio id="sendSound" preload="auto" src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA="></audio>
+
+<script>
+(() => {
+  const chat = document.getElementById('chat');
+  const userInput = document.getElementById('userInput');
+  const sendBtn = document.getElementById('sendBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const priceInfo = document.getElementById('priceInfo');
+  const scoreBoard = document.getElementById('score');
+  const categoryTracker = document.getElementById('categoryTracker');
+  const emojiPickerOverlay = document.getElementById('emojiPickerOverlay');
+  const emojiPicker = emojiPickerOverlay;
+  const inputArea = document.getElementById('inputArea');
+  const bgMusic = document.getElementById('bgMusic');
+  const sendSound = document.getElementById('sendSound');
+
+  let playerEmoji = '';
+  let offerCount = 0;
+  const maxOffers = 3;
+  let currentCategory = '';
+  let currentItem = null;
+  let originalPrice = 0;
+  const score = {
+    wins: 0,
+    losses: 0,
+    categories: {
+      electronics: { wins: 0, losses: 0 },
+      clothing: { wins: 0, losses: 0 },
+      collectibles: { wins: 0, losses: 0 },
+      art: { wins: 0, losses: 0 }
+    }
+  };
+
+  const categories = ['electronics','clothing','collectibles','art'];
+
+  const items = {
+    electronics: [
+      { name: "Smartphone Model Z", price: 1200 },
+      { name: "Gaming Laptop Pro", price: 2500 },
+      { name: "Noise-Cancel Headphones", price: 350 }
+    ],
+    clothing: [
+      { name: "Designer Leather Jacket", price: 700 },
+      { name: "Limited Edition Sneakers", price: 400 },
+      { name: "Silk Scarf", price: 150 }
+    ],
+    collectibles: [
+      { name: "Rare Comic Book #1", price: 1000 },
+      { name: "Vintage Toy Car", price: 300 },
+      { name: "Signed Baseball", price: 450 }
+    ],
+    art: [
+      { name: "Abstract Oil Painting", price: 1800 },
+      { name: "Handcrafted Ceramic Vase", price: 600 },
+      { name: "Limited Edition Print", price: 900 }
+    ]
+  };
+
+  const sellerEmoji = "🕴";
+
+  // Populate emoji picker
+  const emojiList = [
+    "😎","🕴","💼","🤵","🤑","👑","🎩","🍸","🚬","🚗",
+    "🎷","🎺","🎼","🍾","😈","🧥","👠","💎","📿","👔",
+    "🕶","💰","🎲","🥃","🍸","🕯","🛡","⚔"
+  ];
+  emojiList.forEach(emoji => {
+    const btn = document.createElement('button');
+    btn.textContent = emoji;
+    btn.classList.add('emojiBtn');
+    btn.title = emoji;
+    btn.addEventListener('click', () => {
+      playerEmoji = emoji;
+      emojiPickerOverlay.style.display = 'none';
+      startGame();
+    });
+    emojiPicker.appendChild(btn);
+  });
+
+  function appendMessage(text, sender = 'seller') {
+    const div = document.createElement('div');
+    div.classList.add('message', sender);
+    div.innerHTML = text;
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  function appendSellerMessage(text) {
+    appendMessage(`${sellerEmoji} ${text}`, 'seller');
+  }
+
+  function appendBuyerMessage(text) {
+    appendMessage(`${playerEmoji} ${text}`, 'buyer');
+  }
+
+  function capitalize(str) {
+    return str.charAt(0).toUpperCase() + str.slice(1);
+  }
+
+  function updateScoreBoard() {
+    scoreBoard.textContent = `Wins: ${score.wins} | Losses: ${score.losses}`;
+  }
+
+  function updateCategoryTracker() {
+    let text = 'Category Performance: ';
+    for (const cat of categories) {
+      text += `${capitalize(cat)}: W:${score.categories[cat].wins} / L:${score.categories[cat].losses} | `;
+    }
+    categoryTracker.textContent = text.slice(0, -3);
+  }
+
+  function startGame() {
+    inputArea.style.display = 'flex';
+    resetBtn.style.display = 'none';
+    sendBtn.style.display = 'inline-block';
+    userInput.disabled = false;
+    chat.innerHTML = '';
+    offerCount = 0;
+
+    currentCategory = categories[Math.floor(Math.random() * categories.length)];
+    const catItems = items[currentCategory];
+    currentItem = catItems[Math.floor(Math.random() * catItems.length)];
+    originalPrice = currentItem.price;
+
+    priceInfo.textContent = `Category: ${capitalize(currentCategory)} | Item: ${currentItem.name} | Starting Price: $${originalPrice.toLocaleString()}`;
+
+    appendSellerMessage(`Welcome, ${playerEmoji}! I’m selling a <b>${currentItem.name}</b>. The price is <b>$${originalPrice.toLocaleString()}</b>. Your move.`);
+
+    updateScoreBoard();
+    updateCategoryTracker();
+    userInput.value = '';
+    userInput.focus();
+
+    // Play background music if loaded and not blocked
+    bgMusic.play().catch(() => {});
+  }
+
+  function recordWin() {
+    score.wins++;
+    score.categories[currentCategory].wins++;
+  }
+
+  function recordLoss() {
+    score.losses++;
+    score.categories[currentCategory].losses++;
+  }
+
+  function endRound() {
+    sendBtn.style.display = 'none';
+    resetBtn.style.display = 'inline-block';
+    userInput.disabled = true;
+  }
+
+  sendBtn.addEventListener('click', () => {
+    const offerStr = userInput.value.trim();
+    if (!offerStr) return;
+
+    // Play send sound
+    sendSound.currentTime = 0;
+    sendSound.play();
+
+    const offerNum = parseFloat(offerStr.replace(/[^0-9.]/g, ''));
+    if (isNaN(offerNum)) {
+      appendSellerMessage("Hmm, I need a number offer. Try again.");
+      userInput.value = '';
+      return;
+    }
+
+    offerCount++;
+    appendBuyerMessage(`Offer: $${offerNum.toLocaleString()}`);
+
+    if (offerNum >= originalPrice) {
+      appendSellerMessage(`Alright, deal! $${offerNum.toLocaleString()} it is. Pleasure doing business.`);
+      recordWin();
+      endRound();
+    } else if (offerNum >= originalPrice * 0.90) {
+      appendSellerMessage(`I can accept $${offerNum.toLocaleString()}. You drive a hard bargain.`);
+      recordWin();
+      endRound();
+    } else if (offerCount >= maxOffers) {
+      appendSellerMessage(`You’ve used all your offers. I can't go that low. Deal’s off.`);
+      recordLoss();
+      endRound();
+    } else {
+      let reason = '';
+      const diff = originalPrice - offerNum;
+      const percentOff = (diff / originalPrice) * 100;
+
+      if (percentOff > 50) {
+        reason = "That's way below the item's true value. I can't go that low.";
+      } else if (percentOff > 25) {
+        reason = "I appreciate the offer, but that’s still too low for this quality.";
+      } else if (percentOff > 10) {
+        reason = "You're close, but I need to keep it fair for this item.";
+      } else {
+        reason = "That price doesn't quite cut it for me.";
+      }
+      appendSellerMessage(`${reason} Try a bit higher.`);
+    }
+
+    userInput.value = '';
+    userInput.focus();
+  });
+
+  resetBtn.addEventListener('click', () => {
+    startGame();
+    resetBtn.style.display = 'none';
+    sendBtn.style.display = 'inline-block';
+    userInput.disabled = false;
+  });
+
+  // Autoplay background music after user interaction (some browsers block autoplay)
+  document.body.addEventListener('click', () => {
+    bgMusic.play().catch(() => {});
+  }, { once: true });
+
+  // Start by showing emoji picker
+  emojiPickerOverlay.style.display = 'flex';
+
+})();
+</script>
+</body>
+</html>
+
+<audio id="bgMusic" loop>
+  <source src="mafia_theme.mp3" type="audio/mpeg" />
+  Your browser does not support the audio element.
+</audio>
